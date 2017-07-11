@@ -745,6 +745,7 @@ cdef class ReactionSystem(DASx):
                 surfaceReactionIndices = self.surfaceReactionIndices
                 
                 #calculate criteria for surface species
+
                 surfaceTotalDivAccumNums = numpy.ones(len(surfaceReactionIndices))
                 
                 for i in xrange(len(surfaceReactionIndices)):
@@ -823,7 +824,7 @@ cdef class ReactionSystem(DASx):
                             raise ValueError
                     surfaceSpecies,surfaceReactions = self.initialize_surface(coreSpecies,coreReactions,surfaceSpecies,surfaceReactions)
                     logging.info('Surface now has {0} Species and {1} Reactions'.format(len(self.surfaceSpeciesIndices),len(self.surfaceReactionIndices)))
-                    
+    
             if filterReactions:
                 # Calculate unimolecular and bimolecular thresholds for reaction
                 # Set the maximum unimolecular rate to be kB*T/h
