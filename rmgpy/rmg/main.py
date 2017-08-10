@@ -66,6 +66,7 @@ from pdep import PDepNetwork
 import rmgpy.util as util
 
 from rmgpy.chemkin import ChemkinWriter
+from rmgpy.chemkin import saveChemkinFile
 from rmgpy.rmg.output import OutputHTMLWriter
 from rmgpy.rmg.listener import SimulationProfileWriter, SimulationProfilePlotter
 from rmgpy.restart import RestartWriter
@@ -613,6 +614,7 @@ class RMG(util.Subject):
                         surfaceReactions = list(surfRxns),
                         pdepNetworks = self.reactionModel.networkList,
                         prune = prune,
+                        reduction = True,
                         modelSettings=modelSettings,
                         simulatorSettings = simulatorSettings,
                     )
@@ -625,10 +627,18 @@ class RMG(util.Subject):
                             logging.error(prettify(repr(self.reactionModel.core.reactions)))
                         self.makeSeedMech()
                         raise
-
+                    
                     if self.generateSeedEachIteration:
                         self.makeSeedMech()
-                        
+                    
+                    if modelSettings.toleranceNeglectCoreReaction > 0.0 and not modelSettings.removeNeglectedReactions: #doing reduction, but not removing on the fly
+                        saveChemkinFile(os.path.join(self.outputDirectory,'chemkin','chem_annotated_reduced.inp'),
+                                        self.reactionModel.core.species,
+                                        self.reactionModel.getNonNegligibleReactions(self.reactionSystems,modelSettings.toleranceNeglectCoreReaction),
+                                        verbose=True,
+                                        checkForDuplicates=True)
+                                        
+                    
                     newSurfaceSpecies = set(newSurfaceSpecies)
                     newSurfaceReactions = set(newSurfaceReactions)
                     
@@ -707,6 +717,7 @@ class RMG(util.Subject):
                                     surfaceSpecies = self.reactionModel.surfaceSpecies,
                                     surfaceReactions = self.reactionModel.surfaceReactions,
                                     pdepNetworks = self.reactionModel.networkList,
+                                    reduction = True,
                                     modelSettings = tempModelSettings,
                                     simulatorSettings = simulatorSettings,
                                 )
@@ -777,6 +788,7 @@ class RMG(util.Subject):
                     surfaceReactions = [],
                     pdepNetworks = self.reactionModel.networkList,
                     sensitivity = True,
+                    reduction = True,
                     sensWorksheet = sensWorksheet,
                     modelSettings = self.modelSettingsList[-1],
                     simulatorSettings = self.simulatorSettingsList[-1],
@@ -788,6 +800,8 @@ class RMG(util.Subject):
         try:
             self.generateCanteraFiles(os.path.join(self.outputDirectory, 'chemkin', 'chem.inp'))
             self.generateCanteraFiles(os.path.join(self.outputDirectory, 'chemkin', 'chem_annotated.inp'))
+            if modelSettings.toleranceNeglectCoreReaction > 0.0 and not modelSettings.removeNeglectedReactions: #doing reduction, but not removing on the fly 
+                self.generateCanteraFiles(os.path.join(self.outputDirectory, 'chemkin', 'chem_annotated_reduced.inp'))
         except EnvironmentError:
             logging.error('Could not generate Cantera files due to EnvironmentError. Check read\write privileges in output directory.')
                 
