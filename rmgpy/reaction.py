@@ -384,7 +384,7 @@ class Reaction:
         return False
 
     def isIsomorphic(self, other, eitherDirection=True, checkIdentical = False,
-                     checkOnlyLabel = False):
+                     checkOnlyLabel = False, checkTemplateRxnProducts=False):
         """
         Return ``True`` if this reaction is the same as the `other` reaction,
         or ``False`` if they are different. The comparison involves comparing
@@ -398,6 +398,16 @@ class Reaction:
         `checkOnlyLabel` indicates that the string representation will be 
                         checked, ignoring the molecular structure comparisons
         """
+        if checkTemplateRxnProducts:
+            try:
+                species1 = self.products if self.isForward else self.reactants
+                species2 = other.products if other.isForward else other.reactants
+            except AttributeError:
+                raise TypeError('Only use checkTemplateRxnProducts flag for TemplateReactions.')
+
+            return _isomorphicSpeciesList(species1, species2,
+                                          checkIdentical=checkIdentical,
+                                          checkOnlyLabel=checkOnlyLabel)
 
         # Compare reactants to reactants
         forwardReactantsMatch = _isomorphicSpeciesList(self.reactants, 
