@@ -698,6 +698,21 @@ class TestReactionDegeneracy(unittest.TestCase):
         self.assertEqual(forward_reactions[0].degeneracy, reverse_reactions[0].degeneracy,
                          'the kinetics from forward and reverse directions had different degeneracies, {} and {} respectively'.format(forward_reactions[0].degeneracy, reverse_reactions[0].degeneracy))
 
+    def test_degeneracy_same_reactant_different_resonance_structure(self):
+        from rmgpy.rmg.react import reactSpecies
+        from rmgpy.reaction import _isomorphicSpeciesList
+
+        spc = Species().fromSMILES('CC=C[CH2]')
+        reactions = reactSpecies((spc, spc))
+        products = [Species().fromSMILES('CC=CC'), Species().fromSMILES('C=CC=C')]
+
+        for rxn in reactions:
+            if _isomorphicSpeciesList(rxn.products, products):
+                break
+
+        self.assertEqual(rxn.degeneracy, 3)
+        self.assertTrue(set(rxn.template) == {'C_rad/H2/Cd', 'Cmethyl_Csrad/H/Cd'})
+
 class TestKineticsCommentsParsing(unittest.TestCase):
 
     @classmethod
