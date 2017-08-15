@@ -516,7 +516,7 @@ cdef class ReactionSystem(DASx):
         cdef bool ignoreOverallFluxCriterion, filterReactions
         cdef double absoluteTolerance, relativeTolerance, sensitivityAbsoluteTolerance, sensitivityRelativeTolerance
         cdef dict speciesIndex
-        cdef list row
+        cdef list row, tempSurfaceObjects
         cdef list sortedInds, tempNewObjects, tempNewObjectInds, tempNewObjectVals, tempInds
         cdef int index, spcIndex, maxSpeciesIndex, maxNetworkIndex, infAccumNumIndex
         cdef int numCoreSpecies, numEdgeSpecies, numPdepNetworks, numCoreReactions
@@ -789,44 +789,41 @@ cdef class ReactionSystem(DASx):
                 surfaceObjectIndices = []
                 
                 #movement from surface to core
-                if surfaceReactionIndices != [] or surfaceSpeciesIndices != []:
-                    #manage surface reaction movement "on the fly"
-                    for ind in xrange(len(surfaceTotalDivAccumNums)): #move surface reactions to core
-                        if surfaceTotalDivAccumNums[ind] > toleranceMoveSurfaceReactionToCore:
-                            sind = surfaceReactionIndices[ind]
-                            surfaceObjectIndices.append(sind)
-                            surfaceObjects.append(coreReactions[sind])
+                #manage surface reaction movement "on the fly"
+                for ind in xrange(len(surfaceTotalDivAccumNums)): #move surface reactions to core
+                    if surfaceTotalDivAccumNums[ind] > toleranceMoveSurfaceReactionToCore:
+                        sind = surfaceReactionIndices[ind]
+                        surfaceObjectIndices.append(sind)
+                        surfaceObjects.append(coreReactions[sind])
                     
-                    #surface flux calculations
-                    surfaceSpeciesRateRatios = numpy.zeros(len(surfaceSpeciesIndices))
-                    surfaceSpeciesProduction = coreSpeciesProductionRates[surfaceSpeciesIndices]
-                    surfaceSpeciesConsumption = coreSpeciesConsumptionRates[surfaceSpeciesIndices]
+                #surface flux calculations
+                surfaceSpeciesRateRatios = numpy.zeros(len(surfaceSpeciesIndices))
+                surfaceSpeciesProduction = coreSpeciesProductionRates[surfaceSpeciesIndices]
+                surfaceSpeciesConsumption = coreSpeciesConsumptionRates[surfaceSpeciesIndices]
                     
-                    for i in xrange(len(surfaceSpeciesIndices)):
-                        surfaceSpeciesRateRatios[i] = max(abs(surfaceSpeciesProduction[i]),abs(surfaceSpeciesConsumption[i]))/charRate
+                for i in xrange(len(surfaceSpeciesIndices)):
+                    surfaceSpeciesRateRatios[i] = max(abs(surfaceSpeciesProduction[i]),abs(surfaceSpeciesConsumption[i]))/charRate
                     
-                    for ind in xrange(len(surfaceSpeciesIndices)):
-                        if surfaceSpeciesRateRatios[i] > toleranceMoveSurfaceSpeciesToCore:
-                            sind = surfaceSpeciesIndices[ind]
-                            surfaceObjectIndices.append(sind)
-                            surfaceObjects.append(coreSpecies[sind])
+                for ind in xrange(len(surfaceSpeciesIndices)):
+                    if surfaceSpeciesRateRatios[i] > toleranceMoveSurfaceSpeciesToCore:
+                        sind = surfaceSpeciesIndices[ind]
+                        surfaceObjectIndices.append(sind)
+                        surfaceObjects.append(coreSpecies[sind])
                     
-                    if len(surfaceObjects) > 0:
-                        schanged = True
-                        for ind,obj in enumerate(surfaceObjects):
-                            if isinstance(obj,Reaction):
-                                logging.info('Moving reaction {0} from surface to core'.format(obj))
-                                surfaceReactions.remove(obj)
-                            elif isinstance(obj,Species):
-                                logging.info('Moving species {0} from surface to core'.format(obj))
-                                surfaceSpecies.remove(obj)
-                            else:
-                                raise ValueError
-                        surfaceSpecies,surfaceReactions = self.initialize_surface(coreSpecies,coreReactions,surfaceSpecies,surfaceReactions)
-                        surfaceSpeciesIndices = self.surfaceSpeciesIndices
-                        surfaceReactionIndices = self.surfaceReactionIndices
-                        logging.info('Surface now has {0} Species and {1} Reactions'.format(len(self.surfaceSpeciesIndices),len(self.surfaceReactionIndices)))
-                
+                if len(surfaceObjects) > 0:
+                    schanged = True
+                    for ind,obj in enumerate(surfaceObjects):
+                        if isinstance(obj,Reaction):
+                            logging.info('Moving reaction {0} from surface to core'.format(obj))
+                            surfaceReactions.remove(obj)
+                        elif isinstance(obj,Species):
+                            logging.info('Moving species {0} from surface to core'.format(obj))
+                            surfaceSpecies.remove(obj)
+                        else:
+                            raise ValueError
+                    surfaceSpecies,surfaceReactions = self.initialize_surface(coreSpecies,coreReactions,surfaceSpecies,surfaceReactions)
+                    logging.info('Surface now has {0} Species and {1} Reactions'.format(len(self.surfaceSpeciesIndices),len(self.surfaceReactionIndices)))
+                    
             if filterReactions:
                 # Calculate unimolecular and bimolecular thresholds for reaction
                 # Set the maximum unimolecular rate to be kB*T/h
@@ -882,7 +879,7 @@ cdef class ReactionSystem(DASx):
             if useDynamics:     
                 #if the difference in natural log of total accumulation number exceeds tolerance 
                 validLayeringIndices = self.validLayeringIndices
-                tempInds = []
+                tempSurfaceObjects = []
                 
                 for ind,obj in enumerate(edgeReactions):
                     dlnaccum = totalDivLnAccumNums[ind]
@@ -896,7 +893,7 @@ cdef class ReactionSystem(DASx):
                             tempNewObjects.append(edgeReactions[ind])
                             tempNewObjectInds.append(ind)
                             tempNewObjectVals.append(dlnaccum)
-                            tempInds.append(len(newObjects)-1)
+                            tempSurfaceObjects.append(edgeReactions[ind])
                     if dlnaccum > toleranceMoveEdgeReactionToCoreInterrupt:
                         logging.info('At time {0:10.4e} s, Reaction {1} at {2} exceeded the minimum difference in total log(accumulation number) for simulation interruption of {3}'.format(self.t, obj,dlnaccum,toleranceMoveEdgeReactionToCoreInterrupt))
                         interrupt = True
@@ -907,11 +904,13 @@ cdef class ReactionSystem(DASx):
                 newObjectInds.extend([tempNewObjectInds[q] for q in sortedInds])
                 newObjectVals.extend([tempNewObjectVals[q] for q in sortedInds])
                 
+                newSurfaceRxnInds = [newObjects.index(obj) for obj in tempSurfaceObjects]
+                
                 tempNewObjects = []
                 tempNewObjectInds = []
                 tempNewObjectVals = []
                 
-                newSurfaceRxnInds = [sortedInds[q] for q in tempInds]
+                
                 
             #if the network leak rate ratios exceed tolerance
             if pdepNetworks:
