@@ -571,8 +571,11 @@ cdef class ReactionSystem(DASx):
         sensitivityRelativeTolerance = simulatorSettings.sens_rtol
         filterReactions = modelSettings.filterReactions
         maxNumObjsPerIter = modelSettings.maxNumObjsPerIter
+
         #if not pruning always terminate at max objects, otherwise only do so if terminateAtMaxObjects=True
         terminateAtMaxObjects = True if not prune else modelSettings.terminateAtMaxObjects 
+
+        dynamicsTimeScale = modelSettings.dynamicsTimeScale
         
         useDynamics = not (toleranceMoveEdgeReactionToCore == numpy.inf and toleranceMoveEdgeReactionToSurface == numpy.inf)
         
@@ -735,7 +738,8 @@ cdef class ReactionSystem(DASx):
             
             #get abs(delta(Ln(total accumulation numbers))) (accumulation number=Production/Consumption)
             #(the natural log operation is avoided until after the maximum accumulation number is found)
-            if useDynamics and not firstTime:
+
+            if useDynamics and not firstTime and self.t >= dynamicsTimeScale:
                 totalDivAccumNums = numpy.ones(numEdgeReactions)
                 for index in xrange(numEdgeReactions):
                     reactionRate = edgeReactionRates[index]
@@ -767,8 +771,11 @@ cdef class ReactionSystem(DASx):
                 surfaceSpeciesIndices = self.surfaceSpeciesIndices
                 surfaceReactionIndices = self.surfaceReactionIndices
                 
+<<<<<<< HEAD
                 #calculate criteria for surface species
 
+=======
+>>>>>>> DynamicsTimeScale
                 surfaceTotalDivAccumNums = numpy.ones(len(surfaceReactionIndices))
                 
                 for i in xrange(len(surfaceReactionIndices)):
@@ -899,8 +906,8 @@ cdef class ReactionSystem(DASx):
                 tempNewObjects = []
                 tempNewObjectInds = []
                 tempNewObjectVals = []
-            
-            if useDynamics and not firstTime:     
+                              
+            if useDynamics and not firstTime and self.t >= dynamicsTimeScale:     
                 #if the difference in natural log of total accumulation number exceeds tolerance 
                 validLayeringIndices = self.validLayeringIndices
                 tempSurfaceObjects = []
