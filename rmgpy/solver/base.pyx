@@ -534,7 +534,7 @@ cdef class ReactionSystem(DASx):
         cdef numpy.ndarray[numpy.float64_t,ndim=1] surfaceTotalDivAccumNums, surfaceSpeciesRateRatios
         cdef numpy.ndarray[numpy.float64_t, ndim=1] forwardRateCoefficients, coreSpeciesConcentrations
         cdef double  prevTime, totalMoles, c, volume, RTP, unimolecularThresholdVal, bimolecularThresholdVal
-        cdef bool zeroProduction, zeroConsumption, firstTime, useDynamics, terminateAtMaxObjects, schanged
+        cdef bool zeroProduction, zeroConsumption, useDynamicsTemp, firstTime, useDynamics, terminateAtMaxObjects, schanged
         cdef numpy.ndarray[numpy.float64_t, ndim=1] edgeReactionRates
         cdef double reactionRate, production, consumption
         cdef numpy.ndarray[numpy.int_t,ndim=1] surfaceSpeciesIndices, surfaceReactionIndices
@@ -626,19 +626,44 @@ cdef class ReactionSystem(DASx):
         
         stepTime = 1e-12
         prevTime = self.t
+
+        firstTime = True
+        
         while not terminated:
             # Integrate forward in time by one time step
-            try:
-                self.step(stepTime)
-            except DASxError as e:
-                logging.error("Trying to step from time {} to {}".format(prevTime, stepTime))
-                logging.error("Core species names: {!r}".format([getSpeciesIdentifier(s) for s in coreSpecies]))
-                logging.error("Core species moles: {!r}".format(self.y[:numCoreSpecies]))
-                logging.error("Volume: {!r}".format(self.V))
-                logging.error("Core species net rates: {!r}".format(self.coreSpeciesRates))
-                logging.error("Edge species net rates: {!r}".format(self.edgeSpeciesRates))
-                logging.error("Network leak rates: {!r}".format(self.networkLeakRates))
-                raise e
+            if not firstTime:
+                try:
+                    self.step(stepTime)
+                except DASxError as e:
+                    logging.error("Trying to step from time {} to {}".format(prevTime, stepTime))
+                    logging.error("Core species names: {!r}".format([getSpeciesIdentifier(s) for s in coreSpecies]))
+                    logging.error("Core species moles: {!r}".format(self.y[:numCoreSpecies]))
+                    logging.error("Volume: {!r}".format(self.V))
+                    logging.error("Core species net rates: {!r}".format(self.coreSpeciesRates))
+                    logging.error("Edge species net rates: {!r}".format(self.edgeSpeciesRates))
+                    logging.error("Network leak rates: {!r}".format(self.networkLeakRates))
+                    logging.info('Resurrecting Model...')
+                    
+                    if invalidObjects == []:
+                        #species flux criterion
+                        ind = numpy.argmax(edgeSpeciesRateRatios)
+                        obj = edgeSpecies[ind]
+                        logging.info('At time {0:10.4e} s, species {1} at rate ratio {2} was added to model core in model resurrection process'.format(self.t, obj,edgeSpeciesRateRatios[ind]))
+                        invalidObjects.append(obj)
+                        
+                        if totalDivAccumNums: #if dynamics data available
+                            ind = numpy.argmax(totalDivAccumNums)
+                            obj = edgeReactions[ind]
+                            logging.info('At time {0:10.4e} s, Reaction {1} at dynamics number {2} was added to model core in model resurrection process'.format(self.t, obj,totalDivAccumNums[ind]))
+                            invalidObjects.append(obj)
+                        
+                        if pdepNetworks and networkLeakRateRatios != []:
+                            ind = numpy.argmax(networkLeakRateRatios)
+                            obj = pdepNetworks[ind]
+                            logging.info('At time {0:10.4e} s, PDepNetwork #{1:d} at {2} was sent for exploring during model resurrection process'.format(self.t, maxNetwork.index, networkLeakRateRatios[ind],toleranceMoveToCore))
+                            invalidObjects.append(obj)
+                            
+                    return False,invalidObjects,surfaceSpecies,surfaceReactions
             
             y_coreSpecies = self.y[:numCoreSpecies]
             totalMoles = numpy.sum(y_coreSpecies)
@@ -705,14 +730,12 @@ cdef class ReactionSystem(DASx):
                 maxSpecies = edgeSpecies[maxSpeciesIndex]
                 maxSpeciesRate = edgeSpeciesRates[maxSpeciesIndex]
                 logging.info('At time {0:10.4e} s, species {1} was added to model core to avoid singularity'.format(self.t, maxSpecies))
-                self.logRates(charRate, maxSpecies, maxSpeciesRate, numpy.inf, maxNetwork, maxNetworkRate)
-                self.logConversions(speciesIndex, y0)
                 invalidObjects.append(maxSpecies)
                 break
             
             #get abs(delta(Ln(total accumulation numbers))) (accumulation number=Production/Consumption)
             #(the natural log operation is avoided until after the maximum accumulation number is found)
-            if useDynamics:
+            if useDynamics and not firstTime:
                 totalDivAccumNums = numpy.ones(numEdgeReactions)
                 for index in xrange(numEdgeReactions):
                     reactionRate = edgeReactionRates[index]
@@ -877,7 +900,7 @@ cdef class ReactionSystem(DASx):
                 tempNewObjectInds = []
                 tempNewObjectVals = []
             
-            if useDynamics:     
+            if useDynamics and not firstTime:     
                 #if the difference in natural log of total accumulation number exceeds tolerance 
                 validLayeringIndices = self.validLayeringIndices
                 tempSurfaceObjects = []
@@ -971,6 +994,9 @@ cdef class ReactionSystem(DASx):
                 
             if schanged: #reinitialize surface
                 surfaceSpecies,surfaceReactions = self.initialize_surface(coreSpecies,coreReactions,surfaceSpecies,surfaceReactions)
+            
+            if firstTime: #turn off firstTime
+                firstTime = False
                 
             if interrupt: #breaks while loop terminating iterations
                 logging.info('terminating...')
