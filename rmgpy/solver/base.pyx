@@ -561,7 +561,7 @@ cdef class ReactionSystem(DASx):
         cdef int numCoreSpecies, numEdgeSpecies, numPdepNetworks, numCoreReactions
         cdef double stepTime, charRate, maxSpeciesRate, maxNetworkRate, maxEdgeReactionAccum
         cdef numpy.ndarray[numpy.float64_t, ndim=1] y0 #: Vector containing the number of moles of each species
-        cdef numpy.ndarray[numpy.float64_t, ndim=1] coreSpeciesRates, edgeSpeciesRates, networkLeakRates, coreSpeciesProductionRates, coreSpeciesConsumptionRates, totalDivAccumNums
+        cdef numpy.ndarray[numpy.float64_t, ndim=1] coreSpeciesRates, edgeSpeciesRates, networkLeakRates, coreSpeciesProductionRates, coreSpeciesConsumptionRates, totalDivLnAccumNums
         cdef numpy.ndarray[numpy.float64_t, ndim=1] maxCoreSpeciesRates, maxEdgeSpeciesRates, maxNetworkLeakRates,maxEdgeSpeciesRateRatios, maxNetworkLeakRateRatios
         cdef bint terminated
         cdef object maxSpecies, maxNetwork
@@ -570,7 +570,7 @@ cdef class ReactionSystem(DASx):
         cdef int maxSurfaceAccumReactionIndex, maxSurfaceSpeciesIndex
         cdef object maxSurfaceAccumReaction, maxSurfaceSpecies
         cdef numpy.ndarray[numpy.float64_t,ndim=1] surfaceSpeciesProduction, surfaceSpeciesConsumption
-        cdef numpy.ndarray[numpy.float64_t,ndim=1] surfaceTotalDivAccumNums, surfaceSpeciesRateRatios
+        cdef numpy.ndarray[numpy.float64_t,ndim=1] surfaceTotalDivLnAccumNums, surfaceSpeciesRateRatios
         cdef numpy.ndarray[numpy.float64_t, ndim=1] forwardRateCoefficients, coreSpeciesConcentrations
         cdef double  prevTime, totalMoles, c, volume, RTP, unimolecularThresholdVal, bimolecularThresholdVal
         cdef bool zeroProduction, zeroConsumption, firstTime, useDynamics, terminateAtMaxObjects, schanged
@@ -759,7 +759,7 @@ cdef class ReactionSystem(DASx):
             #get abs(delta(Ln(total accumulation numbers))) (accumulation number=Production/Consumption)
             #(the natural log operation is avoided until after the maximum accumulation number is found)
             if useDynamics:
-                totalDivAccumNums = numpy.zeros(numEdgeReactions)
+                totalDivLnAccumNums = numpy.zeros(numEdgeReactions)
                 for index in xrange(numEdgeReactions):
                     reactionRate = edgeReactionRates[index]
                     for spcIndex in self.reactantIndices[index+numCoreReactions,:]:
@@ -767,9 +767,9 @@ cdef class ReactionSystem(DASx):
                             consumption = coreSpeciesConsumptionRates[spcIndex]
                             if consumption != 0:
                                 if useFluxRatioInWeights:
-                                    totalDivAccumNums[index] += coreSpeciesRateRatios[spcIndex]*speciesWeightVec[spcIndex]*abs(numpy.log((reactionRate+consumption)/consumption))
+                                    totalDivLnAccumNums[index] += coreSpeciesRateRatios[spcIndex]*speciesWeightVec[spcIndex]*abs(numpy.log((reactionRate+consumption)/consumption))
                                 else:
-                                    totalDivAccumNums[index] += speciesWeightVec[spcIndex]*abs(numpy.log((reactionRate+consumption)/consumption))
+                                    totalDivLnAccumNums[index] += speciesWeightVec[spcIndex]*abs(numpy.log((reactionRate+consumption)/consumption))
                             elif coreSpeciesConcentrations[spcIndex] == 0: 
                                 pass  #if the species concentration is zero ignore
                             else:
@@ -781,9 +781,9 @@ cdef class ReactionSystem(DASx):
                             production = coreSpeciesProductionRates[spcIndex]
                             if production != 0:
                                 if useFluxRatioInWeights:
-                                    totalDivAccumNums[index] += coreSpeciesRateRatios[spcIndex]*speciesWeightVec[spcIndex]*abs(numpy.log((reactionRate+production)/production))
+                                    totalDivLnAccumNums[index] += coreSpeciesRateRatios[spcIndex]*speciesWeightVec[spcIndex]*abs(numpy.log((reactionRate+production)/production))
                                 else:
-                                    totalDivAccumNums[index] += speciesWeightVec[spcIndex]*abs(numpy.log((reactionRate+production)/production))
+                                    totalDivLnAccumNums[index] += speciesWeightVec[spcIndex]*abs(numpy.log((reactionRate+production)/production))
                             elif coreSpeciesConcentrations[spcIndex] == 0: 
                                 pass #if the species concentration is zero ignore
                             else:
@@ -791,13 +791,13 @@ cdef class ReactionSystem(DASx):
                                 infAccumNumIndex = spcIndex
                                 break
                 
-                totalDivAccumNums *= reactionWeightVec[numCoreReactions:]
+                totalDivLnAccumNums *= reactionWeightVec[numCoreReactions:]
                 
                 surfaceSpeciesIndices = self.surfaceSpeciesIndices
                 surfaceReactionIndices = self.surfaceReactionIndices
                 
                 #calculate criteria for surface species
-                surfaceTotalDivAccumNums = numpy.zeros(len(surfaceReactionIndices))
+                surfaceTotalDivLnAccumNums = numpy.zeros(len(surfaceReactionIndices))
                 
                 for i in xrange(len(surfaceReactionIndices)):
                     index = surfaceReactionIndices[i]
@@ -807,12 +807,12 @@ cdef class ReactionSystem(DASx):
                             consumption = coreSpeciesConsumptionRates[spcIndex]
                             if consumption != 0:
                                 if abs(abs(consumption) - abs(reactionRate)) < absoluteTolerance:
-                                    surfaceTotalDivAccumNums[i] = numpy.inf
+                                    surfaceTotalDivLnAccumNums[i] = numpy.inf
                                 elif reactionRate > 0:
                                      if useFluxRatioInWeights:
-                                         surfaceTotalDivAccumNums[index] += coreSpeciesRateRatios[spcIndex]*speciesWeightVec[spcIndex]*abs(numpy.log((reactionRate+consumption)/consumption))
+                                         surfaceTotalDivLnAccumNums[i] += coreSpeciesRateRatios[spcIndex]*speciesWeightVec[spcIndex]*abs(numpy.log((reactionRate+consumption)/consumption))
                                      else:
-                                         surfaceTotalDivAccumNums[index] += speciesWeightVec[spcIndex]*abs(numpy.log((reactionRate+consumption)/consumption))
+                                         surfaceTotalDivLnAccumNums[i] += speciesWeightVec[spcIndex]*abs(numpy.log((reactionRate+consumption)/consumption))    
                             elif coreSpeciesConcentrations[spcIndex] == 0: 
                                 pass #if the species concentration is zero ignore
                             else:
@@ -824,12 +824,12 @@ cdef class ReactionSystem(DASx):
                             production = coreSpeciesProductionRates[spcIndex]
                             if production != 0:
                                 if abs(abs(production) - abs(reactionRate)) < absoluteTolerance:
-                                    surfaceTotalDivAccumNums[i] = numpy.inf
+                                    surfaceTotalDivLnAccumNums[i] = numpy.inf
                                 elif reactionRate > 0:
                                     if useFluxRatioInWeights:
-                                         surfaceTotalDivAccumNums[index] += coreSpeciesRateRatios[spcIndex]*speciesWeightVec[spcIndex]*abs(numpy.log((reactionRate+production)/production))
+                                         surfaceTotalDivLnAccumNums[i] += coreSpeciesRateRatios[spcIndex]*speciesWeightVec[spcIndex]*abs(numpy.log((reactionRate+production)/production))
                                     else:
-                                         surfaceTotalDivAccumNums[index] += speciesWeightVec[spcIndex]*abs(numpy.log((reactionRate+production)/production))
+                                         surfaceTotalDivLnAccumNums[i] += speciesWeightVec[spcIndex]*abs(numpy.log((reactionRate+production)/production))
                             elif coreSpeciesConcentrations[spcIndex] == 0: 
                                 pass #if the species concentration is zero ignore
                             else:
@@ -839,15 +839,15 @@ cdef class ReactionSystem(DASx):
                             
                 surfaceTotalDivAccumNums = numpy.log(surfaceTotalDivAccumNums)
 
-                surfaceTotalDivAccumNums[index] *= reactionWeightVec[index]
+                surfaceTotalDivLnAccumNums[index] *= reactionWeightVec[index]
 
                 surfaceObjects = []
                 surfaceObjectIndices = []
                 
                 #movement from surface to core
                 #manage surface reaction movement "on the fly"
-                for ind in xrange(len(surfaceTotalDivAccumNums)): #move surface reactions to core
-                    if surfaceTotalDivAccumNums[ind] > toleranceMoveSurfaceReactionToCore:
+                for ind in xrange(len(surfaceTotalDivLnAccumNums)): #move surface reactions to core
+                    if surfaceTotalDivLnAccumNums[ind] > toleranceMoveSurfaceReactionToCore:
                         sind = surfaceReactionIndices[ind]
                         surfaceObjectIndices.append(sind)
                         surfaceObjects.append(coreReactions[sind])
