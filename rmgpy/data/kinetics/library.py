@@ -143,7 +143,6 @@ class KineticsLibrary(Database):
             if entry._longDesc and 'Originally from reaction library: ' in entry._longDesc:
                 lib = entry._longDesc.replace('Originally from reaction library: ','')
                 lib = lib.replace('\n','')
-                logging.info(lib)
                 rxn = LibraryReaction(reactants=entry.item.reactants[:], products=entry.item.products[:],\
                  library=lib, specificCollider=entry.item.specificCollider, kinetics=entry.data, duplicate=entry.item.duplicate,\
                  reversible=entry.item.reversible
@@ -152,14 +151,12 @@ class KineticsLibrary(Database):
                 c = entry._longDesc.split('\n')
                 cnew = [i for i in c if 'family: ' in i]
                 familyname = cnew[0].replace('family: ','')
-                logging.info(familyname)
                 tstring = c[0]
                 ind = tstring.find('rate rule')
                 tstring = tstring[ind+9:]
                 tstrings = tstring.split(';')
                 tstrings[0] = tstrings[0][1:]
                 tstrings[-1] = tstrings[-1][:-1]
-                logging.info(tstring)
                 rxn = TemplateReaction(reactants=entry.item.reactants[:], products=entry.item.products[:],\
                   specificCollider=entry.item.specificCollider, kinetics=entry.data, duplicate=entry.item.duplicate,\
                  reversible=entry.item.reversible,family=familyname,template=tstrings
