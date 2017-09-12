@@ -571,7 +571,8 @@ class RMG(util.Subject):
         
         self.saveEverything()
         
-        self.makeSeedMech(firstTime=True)
+        if self.generateSeedEachIteration:
+            self.makeSeedMech(firstTime=True)
 
         maxNumSpcsHit = False #default
         
@@ -628,7 +629,10 @@ class RMG(util.Subject):
                         else:
                             from rmgpy.cantherm.output import prettify
                             logging.error(prettify(repr(self.reactionModel.core.reactions)))
-                        self.makeSeedMech()
+                        if self.generateSeedEachIteration:
+                            self.makeSeedMech()
+                        else:
+                            self.makeSeedMech(firstTime=True)
                         raise
 
                     if self.generateSeedEachIteration:
@@ -742,6 +746,9 @@ class RMG(util.Subject):
                 maxNumSpcsHit = False
                 continue
         
+        if not self.generateSeedEachIteration:
+            self.makeSeedMech(firstTime=True)
+            
         # Run sensitivity analysis post-model generation if sensitivity analysis is on
         for index, reactionSystem in enumerate(self.reactionSystems):
             
