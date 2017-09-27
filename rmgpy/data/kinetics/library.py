@@ -141,7 +141,7 @@ class KineticsLibrary(Database):
         rxns = []
         for entry in self.entries.values():                
             if entry._longDesc and 'Originally from reaction library: ' in entry._longDesc:
-                lib = entry._longDesc.replace('Originally from reaction library: ','')
+                lib = entry._longDesc.split('\n')[0].replace('Originally from reaction library: ','')
                 lib = lib.replace('\n','')
                 rxn = LibraryReaction(reactants=entry.item.reactants[:], products=entry.item.products[:],\
                  library=lib, specificCollider=entry.item.specificCollider, kinetics=entry.data, duplicate=entry.item.duplicate,\
