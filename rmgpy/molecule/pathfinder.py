@@ -288,7 +288,45 @@ def findAllDelocalizationPathsLonePairRadicalCharge(atom1):
                 or (atom2.isSulfur() and atom2.lonePairs in [1,2,3]))\
                     and (atom2.radicalElectrons == 0):
                 paths.append([atom1, atom2])
-                
+    return paths
+
+def findAllDelocalizationPathsLonePairRadicalMultipleBond(atom1):
+    """
+    Find all the delocalization paths of lone electron pairs next to the radical center indicated
+    by `atom1`. Used to generate resonance isomers. Example: HSO3
+    """
+    cython.declare(paths=list)
+    cython.declare(atom2=Atom, bond12=Bond)
+
+    # No paths if atom1 is not a radical
+    if atom1.radicalElectrons <= 0: return []
+
+    paths = []
+    for atom2, bond12 in atom1.edges.items():
+        # Find all delocalization paths in the direction <forming> the multiple bond
+        if atom2.radicalElectrons == 0:
+            if bond12.isSingle():
+                # atom2 must posses at least one lone pair to loose it
+                if ((atom2.isNitrogen() and atom2.lonePairs in [1,2])
+                    or (atom2.isOxygen() and atom2.lonePairs == 3)  # we currently don't allow uncharged single lone pair O
+                        or (atom2.isSulfur() and atom2.lonePairs in [1,2,3])):
+                    paths.append([atom1, atom2, bond12, 1])
+            elif bond12.isDouble():
+                # atom2 must posses at least one lone pair to loose it
+                if ((atom2.isNitrogen() and atom2.lonePairs in [1])
+                        or (atom2.isSulfur() and atom2.lonePairs in [1,2])):
+                    paths.append([atom1, atom2, bond12, 1])
+
+    # Find all delocalization paths in the direction <breaking> the multiple bond
+    # We currently only consider N/S/O atoms as possible radical centers
+    # only consider radicals that have less than their max lone pairs (i.e. can form another lone pair)
+    if ((atom1.isNitrogen() and atom1.lonePairs in [0,1])
+            or (atom1.isOxygen() and atom1.lonePairs == 2)
+            or (atom1.isSulfur() and atom1.lonePairs in [0,1,2])):
+        # cycle through adjacent atoms until a non-radical connected to atom1 by a double/triple bond is found
+        for atom2, bond12 in atom1.edges.items():
+            if (bond12.isDouble() or bond12.isTriple()) and atom2.radicalElectrons == 0:
+                paths.append([atom1, atom2, bond12, 2])
     return paths
 
 def findAllDelocalizationPathsN5dd_N5ts(atom1):
