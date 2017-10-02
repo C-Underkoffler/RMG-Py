@@ -19,6 +19,6 @@ cpdef dict compute_atom_distance(list atom_indices, Molecule mol)
 
 cpdef list findAllDelocalizationPaths(Atom atom1)
 
-cpdef list findAllDelocalizationPathsLonePairRadical(Atom atom1)
+cpdef list findAllDelocalizationPathsLonePairRadicalCharge(Atom atom1)
 
 cpdef list findAllDelocalizationPathsN5dd_N5ts(Atom atom1)

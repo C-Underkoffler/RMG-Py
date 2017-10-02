@@ -70,7 +70,7 @@ def populateResonanceAlgorithms(features=None):
     if features is None:
         methodList = [
             generateAdjacentResonanceStructures,
-            generateLonePairRadicalResonanceStructures,
+            generateLonePairRadicalResonanceChargeStructures,
             generateN5dd_N5tsResonanceStructures,
             generateAromaticResonanceStructures,
             generateKekuleStructure,
@@ -86,7 +86,7 @@ def populateResonanceAlgorithms(features=None):
         if features['hasNitrogen']:
             methodList.append(generateN5dd_N5tsResonanceStructures)
         if features['hasLonePairs']:
-            methodList.append(generateLonePairRadicalResonanceStructures)
+            methodList.append(generateLonePairRadicalResonanceChargeStructures)
 
     return methodList
 
@@ -300,7 +300,7 @@ def generateAdjacentResonanceStructures(mol):
 
     return isomers
 
-def generateLonePairRadicalResonanceStructures(mol):
+def generateLonePairRadicalResonanceChargeStructures(mol):
     """
     Generate all of the resonance structures formed by lone electron pair - radical shifts.
     """
@@ -314,7 +314,7 @@ def generateLonePairRadicalResonanceStructures(mol):
     if mol.isRadical():
         # Iterate over radicals in structure
         for atom in mol.vertices:
-            paths = pathfinder.findAllDelocalizationPathsLonePairRadical(atom)
+            paths = pathfinder.findAllDelocalizationPathsLonePairRadicalCharge(atom)
             for atom1, atom2 in paths:
                 # Adjust to (potentially) new resonance isomer
                 atom1.decrementRadical()

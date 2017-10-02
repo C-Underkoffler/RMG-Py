@@ -260,10 +260,10 @@ def findAllDelocalizationPaths(atom1):
                     paths.append([atom1, atom2, atom3, bond12, bond23])
     return paths
 
-def findAllDelocalizationPathsLonePairRadical(atom1):
+def findAllDelocalizationPathsLonePairRadicalCharge(atom1):
     """
     Find all the delocalization paths of lone electron pairs next to the radical center indicated
-    by `atom1`. Used to generate resonance isomers.
+    by `atom1`. Used to generate resonance isomers. Example: NO2
     """
     cython.declare(paths=list)
     cython.declare(atom2=Atom, bond12=Bond)
@@ -271,9 +271,10 @@ def findAllDelocalizationPathsLonePairRadical(atom1):
     # No paths if atom1 is not a radical
     if atom1.radicalElectrons <= 0:
         return []
-    
-    # In a first step we only consider nitrogen and oxygen atoms as possible radical centers
-    if not ((atom1.lonePairs == 0 and atom1.isNitrogen()) or(atom1.lonePairs == 2 and atom1.isOxygen())):
+    # We currently only consider N/S/O atoms as possible radical centers
+    if not ((atom1.isNitrogen() and atom1.lonePairs in [0,1])  # in NO2 N has 0 lone pairs; in HO[NH] N has 1 lone pair
+            or (atom1.isOxygen() and atom1.lonePairs in [1,2])      # Eg: NO2 classic, HOS
+            or (atom1.isSulfur() and atom1.lonePairs in [0,1,2])):  # S is not restricted like O. Eg: HOSO2, HOSO, HOS
         return []
     
     # Find all delocalization paths
@@ -281,8 +282,11 @@ def findAllDelocalizationPathsLonePairRadical(atom1):
     for atom2, bond12 in atom1.edges.items():
         # Only single bonds are considered
         if bond12.isSingle():
-            # Neighboring atom must posses a lone electron pair to loose it
-            if ((atom2.lonePairs == 1 and atom2.isNitrogen()) or (atom2.lonePairs == 3 and atom2.isOxygen())) and (atom2.radicalElectrons == 0):
+            # atom2 must posses a lone electron pair to loose it
+            if ((atom2.isNitrogen() and atom2.lonePairs in [1,2])   # NO2 vs. N2H3
+                or (atom2.isOxygen() and atom2.lonePairs in [2,3])  # Eg: NO2, HOS
+                or (atom2.isSulfur() and atom2.lonePairs in [1,2,3]))\
+                    and (atom2.radicalElectrons == 0):
                 paths.append([atom1, atom2])
                 
     return paths
