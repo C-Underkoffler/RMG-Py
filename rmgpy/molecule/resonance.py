@@ -355,11 +355,21 @@ def generateLonePairRadicalResonanceChargeStructures(mol):
     # This will cause a significant slowdown since reactions are explored per isomer.
     # We don't sum-up separately the positive and negative charges for each isomer since each isomer could have several
     # resonance centers.
-    chargeSpan = []
-    for isomer in isomers:
-        chargeSpan.append(max([atom.charge for atom in isomer.vertices]) -
-                          min([atom.charge for atom in isomer.vertices]))
 
+    reducedIsomerList = []
+    span = []
+    for isomer in isomers:
+        isomerChargeSpan = 0.5 * sum([abs(atom.charge) for atom in isomer.vertices])
+        isomerBondSpan = ('=' in isomer.toSMILES()) + ('#' in isomer.toSMILES())
+        isomerValanceSpan = 0
+        for atom in isomer.vertices:
+            if ((atom.isNitrogen() and atom.lonePairs >= 2)
+                    or (atom.isOxygen and atom.lonePairs == 1)
+                    or (atom.isSulfur and atom.lonePairs == 3)):
+                isomerValanceSpan += 1
+        span.append((isomerChargeSpan,isomerBondSpan,isomerValanceSpan))
+        if isomerChargeSpan <=2 and isomerBondSpan <= 1 and isomerValanceSpan <=1:
+            reducedIsomerList.append(isomer)
 
     return isomers
 
