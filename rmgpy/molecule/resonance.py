@@ -350,6 +350,17 @@ def generateLonePairRadicalResonanceChargeStructures(mol):
                 isomer.updateAtomTypes(logSpecies=False)
                 isomers.append(isomer)
 
+    # Find and restrict charge span. If the range of the charges allowed to be formed isn't restricted we get,
+    # for example, 27 isomers for `[N]=NO` with partial charges of up to -3.
+    # This will cause a significant slowdown since reactions are explored per isomer.
+    # We don't sum-up separately the positive and negative charges for each isomer since each isomer could have several
+    # resonance centers.
+    chargeSpan = []
+    for isomer in isomers:
+        chargeSpan.append(max([atom.charge for atom in isomer.vertices]) -
+                          min([atom.charge for atom in isomer.vertices]))
+
+
     return isomers
 
 def generateLonePairRadicalResonanceMultipleBondStructures(mol):
