@@ -45,7 +45,7 @@ class ResonanceTest(unittest.TestCase):
 
         Simple case for lone pair <=> radical resonance"""
         molList = generateResonanceStructures(Molecule(SMILES="CC=N[O]"))
-        self.assertEqual(len(molList), 3)
+        self.assertEqual(len(molList), 7)
         self.assertTrue(any([any([atom.charge != 0 for atom in mol.vertices]) for mol in molList]))
 
     def testN2H3(self):
@@ -121,7 +121,7 @@ class ResonanceTest(unittest.TestCase):
     def testAromaticWithLonePairResonance(self):
         """Test resonance structure generation for aromatic species with lone pair <=> radical resonance"""
         molList = generateResonanceStructures(Molecule(SMILES="c1ccccc1CC=N[O]"))
-        self.assertEqual(len(molList), 6)
+        self.assertEqual(len(molList), 12)
 
     def testAromaticWithNResonance(self):
         """Test resonance structure generation for aromatic species with N5dd <=> N5tc resonance"""
