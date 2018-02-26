@@ -41,6 +41,7 @@ import codecs
 import math
 import numpy
 from copy import copy, deepcopy
+import itertools
 
 from rmgpy.data.base import *
 
@@ -48,9 +49,9 @@ from rmgpy.quantity import Quantity, constants
 from rmgpy.reaction import Reaction, ReactionError
 from rmgpy.molecule import Bond, GroupBond, Group
 from rmgpy.species import Species
-
 from .common import KineticsError, UndeterminableKineticsError, saveEntry
-
+import cPickle as pkl
+from time import time
 ################################################################################
 
 class DistanceData():
@@ -180,6 +181,7 @@ class TransitionStates(Database):
         `reactants`, which should be :class:`Molecule` objects. This method
         searches the depository, libraries, and groups, in that order.
         """
+
         reactionList = []
         reactionList.extend(self.generateReactionsFromLibraries(reactants, products, **options))
         reactionList.extend(self.generateReactionsFromFamilies(reactants, products, **options))
@@ -245,13 +247,12 @@ class TransitionStates(Database):
                 degeneracy = 1,
             )
             template = [groups.entries[label] for label in entry.label.split(';')]
-    
         elif (all([isinstance(reactant, (Molecule, Species)) for reactant in entry.item.reactants]) and
             all([isinstance(product, (Molecule, Species)) for product in entry.item.products])):
             # The entry is a real reaction, containing molecules
             # These could be defined for either the forward or reverse direction
             # and could have a reaction-path degeneracy
-    
+
             reaction = Reaction(reactants=[], products=[])
             for molecule in entry.item.reactants:
                 if isinstance(molecule, Molecule):
@@ -260,6 +261,7 @@ class TransitionStates(Database):
                     reactant = molecule
                 reactant.generateResonanceIsomers()
                 reaction.reactants.append(reactant)
+
             for molecule in entry.item.products:
                 if isinstance(molecule, Molecule):
                     product = Species(molecule=[molecule])
@@ -267,10 +269,9 @@ class TransitionStates(Database):
                     product = molecule
                 product.generateResonanceIsomers()
                 reaction.products.append(product)
-            
+
             # Generate all possible reactions involving the reactant species
             generatedReactions = self.generateReactionsFromFamilies([reactant.molecule[0] for reactant in reaction.reactants], [], only_families=[family], families=rxnFamily)
-            
             # Remove from that set any reactions that don't produce the desired reactants and products
             forward = []; reverse = []
             for rxn in generatedReactions:
@@ -278,7 +279,7 @@ class TransitionStates(Database):
                     forward.append(rxn)
                 if matchSpeciesToMolecules(reaction.reactants, rxn.products) and matchSpeciesToMolecules(reaction.products, rxn.reactants):
                     reverse.append(rxn)
-            
+
             # We should now know whether the reaction is given in the forward or
             # reverse direction
             if len(forward) == 1 and len(reverse) == 0:
@@ -296,15 +297,63 @@ class TransitionStates(Database):
                 reaction.distances = entry.data
                 reaction.distances['d12'] = entry.data['d23']
                 reaction.distances['d23'] = entry.data['d12']
-            elif len(reverse) > 0 and len(forward) > 0:
+            elif len(forward) > 1 and len(reverse) == 0:
+                identical_rxns = True
+                for pair in itertools.combinations(forward, 2):
+                    r1, r2 = pair
+                    if not r1.isIsomorphic(r2):
+                        identical_rxns = False
+
+                if identical_rxns:
+                    #print "WARNING: Generated {} reactions. All reactions generated are identical, selecting the first reaction.".format(len(forward))
+                    reaction = forward[0]
+                    template = reaction.template
+                    #print entry.data
+
+                    # The distances to the H atom are reversed
+                    reaction.distances = entry.data
+                else:
+                    print "FAIL: Multiple unique reactions found for {0!r}.".format(entry.label)
+
+            elif len(forward) == 0 and len(reverse) > 1:
+                identical_rxns = True
+                for pair in itertools.combinations(reverse, 2):
+                    r1, r2 = pair
+                    if not r1.isIsomorphic(r2):
+                        identical_rxns = False
+
+                if identical_rxns:
+                    #print "WARNING: Generated {} number of reactions. All reactions generated are identical, selecting the first reaction.".format(len(reverse))
+                    reaction = reverse[0]
+                    #print reaction
+                    template = reaction.template
+                    # The distances to the H atom are reversed
+                    reaction.distances = entry.data
+                    reaction.distances['d12'] = entry.data['d23']
+                    reaction.distances['d23'] = entry.data['d12']
+                else:
+                    print "FAIL: Multiple unique reactions found for {0!r}.".format(entry.label)
+
+            """elif len(reverse) > 0 and len(forward) > 0:
                 print 'FAIL: Multiple reactions found for {0!r}.'.format(entry.label)
+                print '\nGenerated Reactions'
+                for rxn in generatedReactions:
+                    print rxn
             elif len(reverse) == 0 and len(forward) == 0:
-                print 'FAIL: No reactions found for "%s".' % (entry.label)
+                print 'FAIL: No reactions found for "%s".' % (entry)
+                print '\nGenerated Reactions'
+                for rxn in generatedReactions:
+                    print rxn
             else:
                 print 'FAIL: Unable to estimate distances for {0!r}.'.format(entry.label)
-                
+                logging.warning("length of generated reactions: {}".format(len(generatedReactions)))
+                print '\nGeneratedReactions:'
+                for rxn in generatedReactions:
+                    print rxn"""
+
+
         assert reaction is not None
-        assert template is not None
+        #assert template is not None
         return reaction, template
 
 def filterReactions(reactants, products, reactionList):
@@ -509,10 +558,12 @@ class TSGroups(Database):
         as the reactants, determine the most specific nodes in the tree that
         describe the reaction.
         """
+        #print '*\n*\n*\nGetting Reaction Template'
         # from .family import TemplateReaction
         #assert isinstance(reaction, TemplateReaction), "Can only match TemplateReactions"
         # Get forward reaction template and remove any duplicates
         forwardTemplate = self.top[:]
+        #print "forwardTemplate:\t{}".format(forwardTemplate)
         temporary = []
         symmetricTree = False
         for entry in forwardTemplate:
@@ -521,7 +572,7 @@ class TSGroups(Database):
             else:
                 # duplicate node found at top of tree
                 # eg. R_recombination: ['Y_rad', 'Y_rad']
-                assert len(forwardTemplate)==2 , 'Can currently only do symmetric trees with nothing else in them'
+                assert len(forwardTemplate)==2, 'Can currently only do symmetric trees with nothing else in them'
                 symmetricTree = True
         forwardTemplate = temporary
 
@@ -530,7 +581,7 @@ class TSGroups(Database):
         for entry in forwardTemplate:
             # entry is a top-level node that should be matched
             group = entry.item
-
+            #print "Group:\t\t{}".format(group)
             # To sort out "union" groups, descend to the first child that's not a logical node
             # ...but this child may not match the structure.
             # eg. an R3 ring node will not match an R4 ring structure.
@@ -539,19 +590,34 @@ class TSGroups(Database):
                 group = entry.item.getPossibleStructures(self.entries)[0]
 
             atomList = group.getLabeledAtoms() # list of atom labels in highest non-union node
-            
+            #print "\tGroup atomList: {}".format(atomList)
+
             for reactant in reaction.reactants:
                 if isinstance(reactant, Species):
                     reactant = reactant.molecule[0]
+
+                #print "reactant:\t{}".format(reactant)
+                #Pickling to look for differences in seemingly identical reactions
+                #file_string = "{0}_{1}.pkl".format(reactant.toSMILES(), time())
+                #f = open(file_string, "w")
+                #pkl.dump(reactant, f)
+
                 # Match labeled atoms
                 # Check this reactant has each of the atom labels in this group
+                #for label in atomList.iterkeys():
+                    #print "Label\t{}".format(label)
+                    #print "Returned:\t{}".format(reactant.containsLabeledAtom(label))
                 if not all([reactant.containsLabeledAtom(label) for label in atomList]):
+                    #print ">>>\tLabeled Atoms skip"
                     continue # don't try to match this structure - the atoms aren't there!
                 # Match structures
                 atoms = reactant.getLabeledAtoms()
-                
+
+                #print "atoms:\t\t{}".format(atoms)
+
                 matched_node = self.descendTree(reactant, atoms, root=entry)
                 if matched_node is not None:
+                    #print ">>>\tAppending (('{}')) to Template".format(matched_node)
                     template.append(matched_node)
                 #else:
                 #    logging.warning("Couldn't find match for {0} in {1}".format(entry,atomList))
@@ -565,10 +631,17 @@ class TSGroups(Database):
         # Check that we were able to match the template.
         # template is a list of the actual matched nodes
         # forwardTemplate is a list of the top level nodes that should be matched
+
+        assert len(template) is not 0, "No matched nodes found for template. Template not found"
+
+
+        #print "Template:\t{}".format(template)
+        #print "F - Temp.:\t{}".format(template)
+
         if len(template) != len(forwardTemplate):
             logging.warning('Unable to find matching template for reaction {0} in reaction family {1}'.format(str(reaction), str(self)) )
             logging.warning(" Trying to match " + str(forwardTemplate))
-            logging.warning(" Matched "+str(template))
+            logging.warning(" Matched " + str(template))
             print str(self), template, forwardTemplate
             for n,reactant in enumerate(reaction.reactants):
                 print "Reactant", n
@@ -647,15 +720,17 @@ class TSGroups(Database):
         groupList = list(set(groupList))
         groupList.sort(key=lambda x: x.index)
         
-        if True: # should remove this IF block, as we only have one method.
+        if True: # TODO should remove this IF block, as we only have one method.
             # Initialize dictionaries of fitted group values and uncertainties
             groupValues = {}; groupUncertainties = {}; groupCounts = {}; groupComments = {}
+
             for entry in groupEntries:
+                #print "\n\tEntry: {}".format(entry)
                 groupValues[entry] = []
                 groupUncertainties[entry] = []
                 groupCounts[entry] = []
                 groupComments[entry] = set()
-            
+
             # Generate least-squares matrix and vector
             A = []; b = []
             
@@ -680,7 +755,10 @@ class TSGroups(Database):
                     
                     for group in groups:
                         if isinstance(group, str): group = self.entries[group]
-                        groupComments[group].add("{0!s}".format(template))
+                        #groupComments[group].add("{0!s}".format(template))
+                        groupComments[group] = "{0!s}".format(template)
+                        #print "Template: {}".format(template)
+                        #print "Group: {}".format(group)
             
             if len(A) == 0:
                 logging.warning('Unable to fit kinetics groups for family "{0}"; no valid data found.'.format(self.label))
@@ -749,15 +827,26 @@ class TSGroups(Database):
                         uncertainties = {}
                     # should be entry.*
                     shortDesc = "Fitted to {0} distances.\n".format(groupCounts[entry][0])
-                    longDesc = "\n".join(groupComments[entry.label])
+                    #TODO Fix longDesc
+                    #if isinstance(entry.label, str): nate = self.entries[entry.label]
+                    longDesc = '{}\n'.format(groupComments[entry])
+                    #print "groupComments:\t{}".format(groupComments[entry])
+                    #print "longDesc:\t{}".format(longDesc)
+
+                    #assert False
+
                     distances_dict = {key:distance for key, distance in zip(distance_keys, groupValues[entry])}
                     uncertainties_dict = {key:distance for key, distance in zip(distance_keys, uncertainties)}
                     entry.data = DistanceData(distances=distances_dict, uncertainties=uncertainties_dict)
                     entry.shortDesc = shortDesc
                     entry.longDesc = longDesc
+                    print '\tStart'
+                    print "longDesc: {}".format(entry.longDesc)
+                    assert False
                 else:
                     entry.data = DistanceData()
-        
+
+
         changed = False
         for label, entry in self.entries.items():
             if entry.data is not None:
@@ -774,7 +863,9 @@ class TSGroups(Database):
             else:
                 changed = True
                 entry.history.append(event)
-        return True # because the thing above is broken
+
+        #TODO figure out how to get this to return properly
+        #return True # because the thing above is broken
         return changed
         # below is what has been updated
         # # Add a note to the history of each changed item indicating that we've generated new group values

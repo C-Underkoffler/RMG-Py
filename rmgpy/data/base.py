@@ -45,6 +45,8 @@ except ImportError:
     OrderedDict = dict
 from rmgpy.molecule import Molecule, Group
 from rmgpy.molecule.adjlist import InvalidAdjacencyListError
+#from rmgpy.data.kinetics.transitionstates import TransitionStates, TransitionStateDepository, TSGroups, DistanceData
+
 
 from reference import Reference, Article, Book, Thesis
 

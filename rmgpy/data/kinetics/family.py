@@ -1473,12 +1473,11 @@ class KineticsFamily(Database):
         consistent with the template of this reaction family.
         """
         reactionList = []
-        
         # Forward direction (the direction in which kinetics is defined)
         reactionList.extend(self.__generateReactions(reactants, forward=True))
         
         if not self.ownReverse:
-            # Reverse direction (the direction in which kinetics is not defined)
+            # Reverse direction (the direction in which kinetics is not defined
             reactionList.extend(self.__generateReactions(reactants, forward=False))
 
         return reactionList
@@ -1613,7 +1612,7 @@ class KineticsFamily(Database):
         This method returns degenerate reactions, and `react.findDegeneracies`
         can be used to find the degenerate reactions.
         """
-        
+
         ## This would make all calls to __generateProductStructures() also return
         ## the "transition state structure", a list containing [merged_reactants, merged_products]
         ## with the atom ordering consistent (needed for double-ended searches):
@@ -1741,25 +1740,27 @@ class KineticsFamily(Database):
 
         # Determine the reactant-product pairs to use for flux analysis
         # Also store the reaction template (useful so we can easily get the kinetics later)
+
         for reaction in rxnList:
-            
+            # TODO figure out why this wipes atom labels
             # Restore the labeled atoms long enough to generate some metadata
-            for reactant in reaction.reactants:
-                reactant.clearLabeledAtoms()
-            for label, atom in reaction.labeledAtoms:
-                atom.label = label
-            
+            #print "reactant( {} ) just got its labeled atoms cleared".format(reactant)
+            #for reactant in reaction.reactants:
+            #    reactant.clearLabeledAtoms()
+            #for label, atom in reaction.labeledAtoms:
+            #   atom.label = label
+
             # Generate metadata about the reaction that we will need later
             reaction.pairs = self.getReactionPairs(reaction)
             reaction.template = self.getReactionTemplateLabels(reaction)
 
             # Unlabel the atoms
-            for label, atom in reaction.labeledAtoms:
-                atom.label = ''
-            
+            #for label, atom in reaction.labeledAtoms:
+            #    atom.label = ''
+
             # We're done with the labeled atoms, so delete the attribute
             #del reaction.labeledAtoms
-            
+
         # This reaction list has only checked for duplicates within itself, not
         # with the global list of reactions
         return rxnList
