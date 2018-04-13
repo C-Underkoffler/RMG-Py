@@ -117,7 +117,6 @@ class TransitionStates(Database):
         """
         if local_context is None: local_context = {}
         local_context['DistanceData'] = DistanceData
-        
         fpath = os.path.join(path,'TS_training', 'reactions.py')
         logging.debug("Loading transitions state family training set from {0}".format(fpath))
         depository = TransitionStateDepository(label='{0}/TS_training'.format(path.split('/')[-1]))#'intra_H_migration/TS_training')
@@ -140,6 +139,7 @@ class TransitionStates(Database):
         """
         Return estimated DistanceData for the given reaction
         """
+        #TODO fix
         # Should check depository first, but for now just go straight to group additive estimate:
         return self.groups.estimateDistancesUsingGroupAdditivity(reaction)
     
@@ -149,8 +149,9 @@ class TransitionStates(Database):
         optional `entryName` parameter specifies the identifier used for each
         data entry.
         """
+        print "Saving TS Groups"
         entries = self.groups.getEntriesToSave()
-                
+        myTree = self.groups.top
         # Write the header
         f = codecs.open(path, 'w', 'utf-8')
         f.write('#!/usr/bin/env python\n')
@@ -170,6 +171,7 @@ class TransitionStates(Database):
             f.write('tree(\n')
             f.write('"""\n')
             f.write(self.generateOldTree(self.groups.top, 1))
+            #f.write(self.generateOldTree(entries, 1))
             f.write('"""\n')
             f.write(')\n\n')
 
@@ -353,7 +355,8 @@ class TransitionStates(Database):
 
 
         assert reaction is not None
-        #assert template is not None
+        #assert template is not None #This template is not used when updating the TS_database so it's necessity has been removed
+
         return reaction, template
 
 def filterReactions(reactants, products, reactionList):
@@ -430,9 +433,7 @@ class TransitionStateDepository(Database):
         return '<TransitionStateDepository "{0}">'.format(self.label)
     
     def load(self, path, local_context=None, global_context=None):
-        
         Database.load(self, path, local_context, global_context)
-        
         # Load the species in the kinetics library
         speciesDict = self.getSpecies(os.path.join(os.path.dirname(path),'dictionary.txt'))
         # Make sure all of the reactions draw from only this set
@@ -463,7 +464,6 @@ class TransitionStateDepository(Database):
                     raise DatabaseError('Species {0} in kinetics depository {1} is missing from its dictionary.'.format(product, self.label))
                 # For some reason we need molecule objects in the depository rather than species objects
                 rxn.products.append(speciesDict[product])
-                
             if not rxn.isBalanced():
                 raise DatabaseError('Reaction {0} in kinetics depository {1} was not balanced! Please reformulate.'.format(rxn, self.label))
                 
@@ -552,36 +552,49 @@ class TSGroups(Database):
             longDesc = longDesc.strip(),
         )
 
-    def getReactionTemplate(self, reaction):
+    def getReactionTemplate(self, reaction, myvar = False):
         """
         For a given `reaction` with properly-labeled :class:`Molecule` objects
         as the reactants, determine the most specific nodes in the tree that
         describe the reaction.
         """
+
         #print '*\n*\n*\nGetting Reaction Template'
         # from .family import TemplateReaction
         #assert isinstance(reaction, TemplateReaction), "Can only match TemplateReactions"
         # Get forward reaction template and remove any duplicates
-        forwardTemplate = self.top[:]
+        top_nodes = self.top[:]
         #print "forwardTemplate:\t{}".format(forwardTemplate)
         temporary = []
         symmetricTree = False
-        for entry in forwardTemplate:
+
+        """"""
+        tree_entries = [] #all nodes in the tree as they would appear if you searched through the entire tree
+        for top_node in self.top:
+            descendants = [top_node]
+            descendants.extend(self.descendants(top_node))
+            tree_entries.extend(descendants)
+        tree_indices = {}
+        for tree_index, entry in enumerate(tree_entries):
+            tree_indices[entry] = tree_index
+        """"""
+
+        for entry in top_nodes:
             if entry not in temporary:
                 temporary.append(entry)
             else:
                 # duplicate node found at top of tree
                 # eg. R_recombination: ['Y_rad', 'Y_rad']
-                assert len(forwardTemplate)==2, 'Can currently only do symmetric trees with nothing else in them'
+                assert len(top_nodes)==2, 'Can currently only do symmetric trees with nothing else in them'
                 symmetricTree = True
-        forwardTemplate = temporary
+
+        top_nodes = temporary #Only unique top_nodes
 
         # Descend reactant trees as far as possible
         template = []
-        for entry in forwardTemplate:
+        for entry in top_nodes:
             # entry is a top-level node that should be matched
             group = entry.item
-            #print "Group:\t\t{}".format(group)
             # To sort out "union" groups, descend to the first child that's not a logical node
             # ...but this child may not match the structure.
             # eg. an R3 ring node will not match an R4 ring structure.
@@ -595,33 +608,35 @@ class TSGroups(Database):
             for reactant in reaction.reactants:
                 if isinstance(reactant, Species):
                     reactant = reactant.molecule[0]
+                    #print "reactant:\t{}".format(reactant)
+                    #Pickling to look for differences in seemingly identical reactions
+                    #file_string = "{0}_{1}.pkl".format(reactant.toSMILES(), time())
+                    #f = open(file_string, "w")
+                    #pkl.dump(reactant, f)
 
-                #print "reactant:\t{}".format(reactant)
-                #Pickling to look for differences in seemingly identical reactions
-                #file_string = "{0}_{1}.pkl".format(reactant.toSMILES(), time())
-                #f = open(file_string, "w")
-                #pkl.dump(reactant, f)
-
-                # Match labeled atoms
-                # Check this reactant has each of the atom labels in this group
-                #for label in atomList.iterkeys():
+                    # Match labeled atoms
+                    # Check this reactant has each of the atom labels in this group
+                    #for label in atomList.iterkeys():
                     #print "Label\t{}".format(label)
                     #print "Returned:\t{}".format(reactant.containsLabeledAtom(label))
                 if not all([reactant.containsLabeledAtom(label) for label in atomList]):
-                    #print ">>>\tLabeled Atoms skip"
+                    print ">>>\tLabeled Atoms skip"
                     continue # don't try to match this structure - the atoms aren't there!
                 # Match structures
                 atoms = reactant.getLabeledAtoms()
 
-                #print "atoms:\t\t{}".format(atoms)
-
                 matched_node = self.descendTree(reactant, atoms, root=entry)
+
                 if matched_node is not None:
-                    #print ">>>\tAppending (('{}')) to Template".format(matched_node)
+                    matched_node.index = tree_indices[matched_node]
+                    #if myvar:
+                    #print ">>>\tAppending '{}' to Template".format(matched_node)
+                    if isinstance(matched_node, str):
+                        matched_node = self.entries[matched_node]
                     template.append(matched_node)
-                #else:
-                #    logging.warning("Couldn't find match for {0} in {1}".format(entry,atomList))
-                #    logging.warning(reactant.toAdjacencyList())
+                    #else:
+                    #    logging.warning("Couldn't find match for {0} in {1}".format(entry,atomList))
+                    #    logging.warning(reactant.toAdjacencyList())
 
         # Get fresh templates (with duplicate nodes back in)
         forwardTemplate = self.top[:]
@@ -634,9 +649,9 @@ class TSGroups(Database):
 
         assert len(template) is not 0, "No matched nodes found for template. Template not found"
 
-
-        #print "Template:\t{}".format(template)
-        #print "F - Temp.:\t{}".format(template)
+        #if myvar:
+            #print "Template:\t{}".format(template)
+            #print "F - Temp.:\t{}".format(forwardTemplate)
 
         if len(template) != len(forwardTemplate):
             logging.warning('Unable to find matching template for reaction {0} in reaction family {1}'.format(str(reaction), str(self)) )
@@ -650,11 +665,11 @@ class TSGroups(Database):
                 print "Product", n
                 print product.toAdjacencyList() + '\n'
             raise UndeterminableKineticsError(reaction)
-        
+
         for reactant in reaction.reactants:
             if isinstance(reactant, Species):
                 reactant = reactant.molecule[0]
-            #reactant.clearLabeledAtoms()
+            #reactant.clearLabeledAtoms()       #The problem with this is it gets called multiple times, wiping labels before the implemented call of the method
 
         return template
 
@@ -689,6 +704,7 @@ class TSGroups(Database):
 
 
     def generateGroupAdditivityValues(self, trainingSet):
+        #TODO polish this entire thing. Take out testing code and add comments
         """
         Generate the group additivity values using the given `trainingSet`,
         a list of 2-tuples of the form ``(template, kinetics)``. You must also
@@ -696,158 +712,215 @@ class TSGroups(Database):
         generating the group values. Returns ``True`` if the group values have
         changed significantly since the last time they were fitted, or ``False``
         otherwise.
-        """        
+        """
         # keep track of previous values so we can detect if they change
-        old_entries = dict()
-        for label,entry in self.entries.items():
-            if entry.data is not None:
-                old_entries[label] = entry.data
-        
+        #old_entries = dict()
+        #for label, entry in self.entries.items():
+        #for entry in self.entries:
+            #old_entries[label] = entry.data
+            #if entry.data is not None:
+                #old_entries[label] = entry.data
+        """"""
+        tree_entries = [] #all nodes in the tree as they would appear if you searched through the entire tree
+        for top_node in self.top:
+            descendants = [top_node]
+            descendants.extend(self.descendants(top_node))
+            tree_entries.extend(descendants)
+        tree_indices = {}
+        for tree_index, entry in enumerate(tree_entries):
+            tree_indices[entry] = tree_index
+            self.entries[tree_index] = entry
+        """"""
+        """""" #Attempting to reorganize entries within self.entries in their appropriate locations
+        """old_entries = self.entries
+        for old_index in old_entries:
+            new_index = tree_indices[old_entries[old_index].label]
+            self.entries[new_index] = old_entries[old_index]
+        """
+
+        #TODO test and then change back
+
         # Determine a complete list of the entries in the database, sorted as in the tree
-        groupEntries = self.top[:]
-        
-        for entry in self.top:
-            groupEntries.extend(self.descendants(entry)) # Entries in the TS_group.py tree
-        
+        top_nodes = self.top
+        #groupEntries = self.top
+        #TODO get rid of groupEntries once testing done
+
+        #print
+        #for top_node in top_nodes:
+            #print 'top_node:\t{}'.format(top_node)
+
+        all_nodes = [] #all nodes in the tree as they would appear if you searched through the entire tree
+        #for entry in groupEntries:
+        for top_node in top_nodes:
+            descendants = [top_node]
+            descendants.extend(self.descendants(top_node))
+            all_nodes.extend(descendants)
+            #groupEntries.extend(self.descendants(entry))
+
+        #for node in top_nodes:
+        #    print 'Top node:\t{}'.format(node)
+
+        #for node in all_nodes:
+            #print 'node:\t{}'.format(node)
+
+        groupEntries = all_nodes
+
         # Determine a unique list of the groups we will be able to fit parameters for
-        groupList = []
+        groupList = [] #groupList is all ancestors of a node except the last one
         for template, distances in trainingSet:
             for group in template:
-                if isinstance(group, str): group = self.entries[group]
-                if group not in self.top:
-                    groupList.append(group)
-                    groupList.extend(self.ancestors(group)[:-1])
+                if isinstance(group, str):
+                    group_entry = self.entries[group]
+                else:
+                    group_entry = group
+                if group_entry not in self.top:
+                    groupList.append(group_entry)
+                groupList.extend(self.ancestors(group)[:-1])
+                #groupList.extend(self.ancestors(group))
+
         groupList = list(set(groupList))
         groupList.sort(key=lambda x: x.index)
-        
-        if True: # TODO should remove this IF block, as we only have one method.
-            # Initialize dictionaries of fitted group values and uncertainties
-            groupValues = {}; groupUncertainties = {}; groupCounts = {}; groupComments = {}
+        #at this moment, groupList is a unique list of all groups we have data for
 
-            for entry in groupEntries:
-                #print "\n\tEntry: {}".format(entry)
-                groupValues[entry] = []
-                groupUncertainties[entry] = []
-                groupCounts[entry] = []
-                groupComments[entry] = set()
+        #for item in groupList:
+        #    print 'item:\t{}'.format(item)
+        print 'group list length: {}'.format(len(groupList))
+        # Does not include top nodes
 
-            # Generate least-squares matrix and vector
-            A = []; b = []
-            
-            distance_keys = sorted(trainingSet[0][1].distances.keys())  # ['d12', 'd13', 'd23']
-            distance_data = []
-            for template, distanceData in trainingSet:
-                d = [distanceData.distances[key] for key in distance_keys]
-                distance_data.append(d)
-                    
-                # Create every combination of each group and its ancestors with each other
-                combinations = []
+        print 'all nodes count: {}'.format(len(all_nodes))
+        # Initialize dictionaries of fitted group values and uncertainties
+        groupValues = {}; groupUncertainties = {}; groupCounts = {}; groupComments = {}
+
+        for entry in all_nodes:
+            #print "\n\tEntry: {}".format(entry)
+            groupValues[entry] = []
+            groupUncertainties[entry] = []
+            groupCounts[entry] = []
+            groupComments[entry] = set()
+
+        # least-squares matrix and vector
+        A = []; B = []
+
+        distance_keys = sorted(trainingSet[0][1].distances.keys())  # ['d12', 'd13', 'd23']
+        distance_data = []
+        for template, distanceData in trainingSet:
+            d_list = [distanceData.distances[key] for key in distance_keys]
+            distance_data.append(d_list)
+
+            # Create every combination of each group and its ancestors with each other
+            combinations = []
+            for group in template:
+                groups = [group]
+                groups.extend(self.ancestors(group))
+                combinations.append(groups)
+
+            combinations = getAllCombinations(combinations)
+            # Add a row to the matrix for each combination
+            for groups in combinations:
+                Arow = [1 if group in groups else 0 for group in groupList]
+                #Groups is ancestors and group of second group from template
+                #groupList is all relavent groups and ancestors
+                #Arow is vector that represents all groups. 1 for group relevant to the combination
+                Arow.append(1) #For a total
+                brow = d_list
+                A.append(Arow); B.append(brow)
+
+                for group in groups:
+                    if isinstance(group, str):
+                        group = self.entries[group]
+                    groupComments[group].add("{0!s}".format(template))
+
+        if len(A) == 0:
+            logging.warning('Unable to fit kinetics groups for family "{0}"; no valid data found.'.format(self.label))
+            return
+        A = numpy.array(A)
+        B = numpy.array(B)
+        distance_data = numpy.array(distance_data)
+
+        import scipy.stats
+        x, residuals, rank, s = numpy.linalg.lstsq(A, B)
+        for t, distance_key in enumerate(distance_keys):
+            # Determine error in each group
+            stdev = numpy.zeros(len(groupList)+1, numpy.float64)
+            count = numpy.zeros(len(groupList)+1, numpy.int)
+
+            #it seems convoluted but it creates a list of variances for all entries in groups entries
+            #the last item of the list is the sum of variances for the entire list which represents the entry
+
+            #for index in range(len(trainingSet)):
+            for index, [template, distances] in enumerate(trainingSet):
+                #template, distances = trainingSet[index]
+                d = numpy.float64(distance_data[index,t])
+                #d = numpy.float64(distances)
+                dm = x[-1,t] + sum([x[groupList.index(group),t] for group in template if group in groupList])
+                variance = (dm - d)**2
                 for group in template:
-                    groups = [group]; groups.extend(self.ancestors(group)) # Groups from the group.py tree
-                    combinations.append(groups)
-                combinations = getAllCombinations(combinations)
-                # Add a row to the matrix for each combination
-                for groups in combinations:
-                    Arow = [1 if group in groups else 0 for group in groupList]
-                    Arow.append(1)
-                    brow = d
-                    A.append(Arow); b.append(brow)
-                    
-                    for group in groups:
-                        if isinstance(group, str): group = self.entries[group]
-                        #groupComments[group].add("{0!s}".format(template))
-                        groupComments[group] = "{0!s}".format(template)
-                        #print "Template: {}".format(template)
-                        #print "Group: {}".format(group)
-            
-            if len(A) == 0:
-                logging.warning('Unable to fit kinetics groups for family "{0}"; no valid data found.'.format(self.label))
-                return
-            A = numpy.array(A)
-            b = numpy.array(b)
-            distance_data = numpy.array(distance_data)
-            
-            x, residues, rank, s = numpy.linalg.lstsq(A, b)
-            
-            for t, distance_key in enumerate(distance_keys):
-                
-                # Determine error in each group
-                stdev = numpy.zeros(len(groupList)+1, numpy.float64)
-                count = numpy.zeros(len(groupList)+1, numpy.int)
-                
-                for index in range(len(trainingSet)):
-                    template, distances = trainingSet[index]
-                    d = numpy.float64(distance_data[index,t])
-                    dm = x[-1,t] + sum([x[groupList.index(group),t] for group in template if group in groupList])
-                    variance = (dm - d)**2
-                    for group in template:
-                        groups = [group]
-                        groups.extend(self.ancestors(group))
-                        for g in groups:
-                            if g.label not in [top.label for top in self.top]:
-                                ind = groupList.index(g)
-                                stdev[ind] += variance
-                                count[ind] += 1
-                    stdev[-1] += variance
-                    count[-1] += 1
-                
-                import scipy.stats
-                ci = numpy.zeros(len(count))
-                for i in range(len(count)):
-                    if count[i] > 1:
-                        stdev[i] = numpy.sqrt(stdev[i] / (count[i] - 1))
-                        ci[i] = scipy.stats.t.ppf(0.975, count[i] - 1) * stdev[i]
-                    else:
-                        stdev[i] = None
-                        ci[i] = None
-                # Update dictionaries of fitted group values and uncertainties
-                for entry in groupEntries:
-                    if entry == self.top[0]:
-                        groupValues[entry].append(x[-1,t])
-                        groupUncertainties[entry].append(ci[-1])
-                        groupCounts[entry].append(count[-1])
-                    elif entry.label in [group.label for group in groupList]:
-                        index = [group.label for group in groupList].index(entry.label)
-                        groupValues[entry].append(x[index,t])
-                        groupUncertainties[entry].append(ci[index])
-                        groupCounts[entry].append(count[index])
-                    else:
-                        groupValues[entry] = None
-                        groupUncertainties[entry] = None
-                        groupCounts[entry] = None
-            
-            # Store the fitted group values and uncertainties on the associated entries
-            for entry in groupEntries:
-                if groupValues[entry] is not None:
-                    if not any(numpy.isnan(numpy.array(groupUncertainties[entry]))):
-                        # should be entry.data.* (e.g. entry.data.uncertainties)
-                        uncertainties = numpy.array(groupUncertainties[entry])
-                        uncertaintyType = '+|-'
-                    else:
-                        uncertainties = {}
-                    # should be entry.*
-                    shortDesc = "Fitted to {0} distances.\n".format(groupCounts[entry][0])
-                    #TODO Fix longDesc
-                    #if isinstance(entry.label, str): nate = self.entries[entry.label]
-                    longDesc = '{}\n'.format(groupComments[entry])
-                    #print "groupComments:\t{}".format(groupComments[entry])
-                    #print "longDesc:\t{}".format(longDesc)
+                    groups = [group]
+                    groups.extend(self.ancestors(group))
+                    for g in groups:
+                        if g not in self.top:
+                            ind = groupList.index(g)
+                            stdev[ind] += variance
+                            count[ind] += 1
+                stdev[-1] += variance
+                count[-1] += 1
 
-                    #assert False
-
-                    distances_dict = {key:distance for key, distance in zip(distance_keys, groupValues[entry])}
-                    uncertainties_dict = {key:distance for key, distance in zip(distance_keys, uncertainties)}
-                    entry.data = DistanceData(distances=distances_dict, uncertainties=uncertainties_dict)
-                    entry.shortDesc = shortDesc
-                    entry.longDesc = longDesc
-                    print '\tStart'
-                    print "longDesc: {}".format(entry.longDesc)
-                    assert False
+            #import scipy.stats
+            ci = numpy.zeros(len(count))
+            for i in range(len(count)):
+                if count[i] > 1:
+                    stdev[i] = numpy.sqrt(stdev[i] / (count[i] - 1))
+                    ci[i] = scipy.stats.t.ppf(0.975, count[i] - 1) * stdev[i]
+                    #'probability density function'
                 else:
-                    entry.data = DistanceData()
+                    stdev[i] = None
+                    ci[i] = None
+            # Update dictionaries of fitted group values and uncertainties
+            for entry in all_nodes:
+                if entry == self.top[0]:
+                    groupValues[entry].append(x[-1, t])
+                    groupUncertainties[entry].append(ci[-1])
+                    groupCounts[entry].append(count[-1])
+                elif entry.label in [group.label for group in groupList]:
+                    #index = [group.label for group in groupList].index(entry.label)
+                    index = groupList.index(entry)
+                    groupValues[entry].append(x[index,t])
+                    groupUncertainties[entry].append(ci[index])
+                    groupCounts[entry].append(count[index])
+                else:
+                    groupValues[entry] = None
+                    groupUncertainties[entry] = None
+                    groupCounts[entry] = None
 
+        # Store the fitted group values and uncertainties on the associated entries
 
-        changed = False
+        for entry in all_nodes:
+            if groupValues[entry] is not None:
+                if not any(numpy.isnan(numpy.array(groupUncertainties[entry]))):
+                    # should be entry.data.* (e.g. entry.data.uncertainties)
+                    uncertainties = numpy.array(groupUncertainties[entry])
+                    uncertaintyType = '+|-'
+                else:
+                    uncertainties = {}
+                # should be entry.*
+                shortDesc = "Fitted to {0} distances.\n".format(groupCounts[entry][0])
+                #if isinstance(entry.label, str): nate = self.entries[entry.label]
+                longDesc = "\n".join(groupComments[entry])
+                #longDesc = '{}\n'.format(groupComments[entry])
+                #print "groupComments:\t{}".format(groupComments[entry])
+                #print "longDesc:\t{}".format(longDesc)
+                distances_dict = {key:distance for key, distance in zip(distance_keys, groupValues[entry])}
+                uncertainties_dict = {key:distance for key, distance in zip(distance_keys, uncertainties)}
+                entry.data = DistanceData(distances=distances_dict, uncertainties=uncertainties_dict)
+                entry.shortDesc = shortDesc
+                entry.longDesc = longDesc
+                #print '\tStart'
+                #print "longDesc: {}".format(entry.longDesc)
+            else:
+                entry.data = DistanceData()
+                entry.longDesc = ''
+
+        """changed = False
         for label, entry in self.entries.items():
             if entry.data is not None:
                 continue # because this is broken:
@@ -862,9 +935,10 @@ class TSGroups(Database):
                             entry.history.append(event)
             else:
                 changed = True
-                entry.history.append(event)
+                entry.history.append(event)"""
 
         #TODO figure out how to get this to return properly
+        changed = True
         #return True # because the thing above is broken
         return changed
         # below is what has been updated
