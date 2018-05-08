@@ -100,7 +100,7 @@ def saveEntry(f, entry):
                 f.write('    duplicate = {0!r},\n'.format(entry.item.duplicate))
             if not entry.item.reversible:
                 f.write('    reversible = {0!r},\n'.format(entry.item.reversible))
-    #Entries for groups with have a group or logicNode for its item
+    #Entries for groups that have a group or logicNode for its item
     elif isinstance(entry.item, Group):
         f.write('    group = \n')
         f.write('"""\n')
@@ -154,7 +154,7 @@ def saveEntry(f, entry):
             f.write(entry.shortDesc.strip().encode('ascii', 'ignore')+ "\n")
         f.write('""",\n')
     
-    if entry.longDesc.strip() !='':
+    if entry.longDesc.strip() != '':
         f.write('    longDesc = \n')
         f.write('u"""\n')
         try:

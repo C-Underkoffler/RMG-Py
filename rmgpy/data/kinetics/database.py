@@ -100,6 +100,7 @@ class KineticsDatabase(object):
         points to the top-level folder of the families database.
         """
         self.loadRecommendedFamiliesList(os.path.join(path, 'families', 'recommended.py')),
+        #Once recommended families are known, now relavent families can be loaded
         self.loadFamilies(os.path.join(path, 'families'), families, depositories)
         self.loadLibraries(os.path.join(path, 'libraries'), libraries)
 
@@ -133,7 +134,6 @@ class KineticsDatabase(object):
         Load the kinetics families from the given `path` on disk, where `path`
         points to the top-level folder of the kinetics families.
         """
-        
         familiesToLoad = []
         for (root, dirs, files) in os.walk(os.path.join(path)):
             if root == path:
@@ -146,6 +146,8 @@ class KineticsDatabase(object):
                     recommended = self.recommendedFamilies[d]
                 except KeyError:
                     raise DatabaseError('Family {0} not found in recommendation list (probably at {1}/recommended.py)'.format(d, path))
+                    print 'Family not in recommended'
+                    assert False
                 if recommended:
                     familiesToLoad.append(d)
             for label, value in self.recommendedFamilies.iteritems():
@@ -199,7 +201,6 @@ class KineticsDatabase(object):
         and the libraries should be in files like :file:`<path>/<library>.py`.
         """
         self.libraries = {}
-        
         if libraries is not None:
             for library_name in libraries:
                 library_file = os.path.join(path, library_name,'reactions.py')

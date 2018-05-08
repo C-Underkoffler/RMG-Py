@@ -684,8 +684,7 @@ class KineticsFamily(Database):
             logging.debug("Loading kinetics family depository from {0}".format(fpath))
             depository.load(fpath, local_context, global_context)
             self.depositories.append(depository)
-            
-        
+
         if depositoryLabels is None:
             # load all the remaining depositories, in order returned by os.walk
             for root, dirs, files in os.walk(path):
@@ -719,7 +718,6 @@ class KineticsFamily(Database):
                                                             reverseRecipe=None,
                                                             forbidden=None
                                                             )
-                                                            
             self.transitionStates.load(path, local_context, global_context)
 
     def loadTemplate(self, reactants, products, ownReverse=False):

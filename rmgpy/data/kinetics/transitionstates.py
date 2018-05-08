@@ -799,7 +799,7 @@ class TSGroups(Database):
             groupComments[entry] = set()
 
         # least-squares matrix and vector
-        A = []; B = []
+        A = []; b = []
 
         distance_keys = sorted(trainingSet[0][1].distances.keys())  # ['d12', 'd13', 'd23']
         distance_data = []
@@ -823,7 +823,7 @@ class TSGroups(Database):
                 #Arow is vector that represents all groups. 1 for group relevant to the combination
                 Arow.append(1) #For a total
                 brow = d_list
-                A.append(Arow); B.append(brow)
+                A.append(Arow); b.append(brow)
 
                 for group in groups:
                     if isinstance(group, str):
@@ -834,11 +834,11 @@ class TSGroups(Database):
             logging.warning('Unable to fit kinetics groups for family "{0}"; no valid data found.'.format(self.label))
             return
         A = numpy.array(A)
-        B = numpy.array(B)
+        b = numpy.array(b)
         distance_data = numpy.array(distance_data)
 
         import scipy.stats
-        x, residuals, rank, s = numpy.linalg.lstsq(A, B)
+        x, residuals, rank, s = numpy.linalg.lstsq(A, b)
         for t, distance_key in enumerate(distance_keys):
             # Determine error in each group
             stdev = numpy.zeros(len(groupList)+1, numpy.float64)
@@ -850,8 +850,8 @@ class TSGroups(Database):
             #for index in range(len(trainingSet)):
             for index, [template, distances] in enumerate(trainingSet):
                 #template, distances = trainingSet[index]
-                d = numpy.float64(distance_data[index,t])
-                #d = numpy.float64(distances)
+                #d = numpy.float64(distance_data[index,t])
+                d = numpy.float64(distances[t])
                 dm = x[-1,t] + sum([x[groupList.index(group),t] for group in template if group in groupList])
                 variance = (dm - d)**2
                 for group in template:
